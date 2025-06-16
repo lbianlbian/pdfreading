@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>PDF Text Extractor</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; background: #f7f7f7; }
+    .container { background: #fff; padding: 30px; border-radius: 8px; max-width: 600px; margin: auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    #pdf-text { white-space: pre-wrap; margin-top: 20px; background: #f0f0f0; padding: 15px; border-radius: 5px; min-height: 80px; }
+    label { display: inline-block; padding: 10px 20px; background: #007bff; color: #fff; border-radius: 4px; cursor: pointer; font-size: 16px; }
+    input[type="file"] { display: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Upload a PDF and See Its Text</h2>
+    <label for="pdf-upload">Choose PDF</label>
+    <input type="file" id="pdf-upload" accept="application/pdf">
+    <div id="pdf-text">PDF text will appear here.</div>
+  </div>
+  <script type="module">
+    import * as pdfjsLib from 'https://mozilla.github.io/pdf.js/build/pdf.mjs';
+
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        'https://mozilla.github.io/pdf.js/build/pdf.worker.mjs';
+  </script>
+  
+  <script>
+    const input = document.getElementById('pdf-upload');
+    const output = document.getElementById('pdf-text');
+
+    input.addEventListener('change', async function() {
+      const file = this.files[0];
+      if (!file) return;
+      if (file.type !== 'application/pdf') {
+        output.textContent = 'Please upload a PDF file.';
+        return;
+      }
+      output.textContent = 'Extracting text...';
+
+      const reader = new FileReader();
+      reader.onload = async function(e) {
+        const typedarray = new Uint8Array(e.target.result);
+        try {
+          const pdf = await pdfjsLib.getDocument({data: typedarray}).promise;
+          let text = '';
+          for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const content = await page.getTextContent();
+            text += content.items.map(item => item.str).join(' ') + '\n\n';
+          }
+          output.textContent = text.trim() || 'No text found in PDF.';
+        } catch (err) {
+          output.textContent = 'Error reading PDF: ' + err.message;
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  </script>
+</body>
+</html>
