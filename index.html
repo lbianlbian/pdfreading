@@ -46,22 +46,6 @@
             x: 154.44,
             y: 28
         },
-        modelNumber: {
-            x: 312.38,
-            y: 27
-        },
-        internetNumber: {
-            "x": 312.38,
-            "y": 106
-        },
-        itemDescription: {
-            "x": 505.4,
-            "y": 308
-        },
-        qtyShipped: {
-            "x": 312.38,
-            "y": 398.22
-        },
         poNumber: {
             "x": 467.5,
             "y": 23
@@ -91,7 +75,25 @@
         x: 218.38,
         y: 28
     };  // lines go name, possibly addl name, address, city, tel
-
+    const ORDERS = {
+        modelNumber: {
+            x: 312.38,
+            y: 27
+        },
+        internetNumber: {
+            "x": 312.38,
+            "y": 106
+        },
+        itemDescription: {
+            "x": 505.4,
+            "y": 308
+        },
+        qtyShipped: {
+            "x": 312.38,
+            "y": 398.22
+        }
+    };  // find the first order, loop until "Thank you" is encountered, use y to match types
+    
     input.addEventListener('change', async function() {
         const file = this.files[0];
         if (!file) return;
@@ -110,7 +112,7 @@
                 for (let i = 1; i <= pdf.numPages; i++) {
                     const page = await pdf.getPage(i);
                     const content = await page.getTextContent();
-                    let currOrder = {};
+                    let currPage = {};
                     for(let col in POSITION_OF){
                         for(let item of content.items){
                             // 4 is x position, 5 is y position
@@ -119,7 +121,7 @@
                                 item.transform[4] == POSITION_OF[col].x && 
                                 item.transform[5] == POSITION_OF[col].y
                             ){
-                                currOrder[col] = item.str;
+                                currPage[col] = item.str;
                                 break;
                             }
                         }
@@ -145,19 +147,43 @@
                     }
                     if(vals.length == 5){
                         // multiple line customer name
-                        currOrder.shipToName = `${vals[0]} ${vals[1]}`;
-                        currOrder.shipToAddress = vals[2];
-                        currOrder.shipToCity = vals[3];
-                        currOrder.shipToTel = vals[4];
+                        currPage.shipToName = `${vals[0]} ${vals[1]}`;
+                        currPage.shipToAddress = vals[2];
+                        currPage.shipToCity = vals[3];
+                        currPage.shipToTel = vals[4];
                     }
                     else{
-                        currOrder.shipToName = vals[0];
-                        currOrder.shipToAddress = vals[1];
-                        currOrder.shipToCity = vals[2];
-                        currOrder.shipToTel = vals[3];
+                        currPage.shipToName = vals[0];
+                        currPage.shipToAddress = vals[1];
+                        currPage.shipToCity = vals[2];
+                        currPage.shipToTel = vals[3];
                     }
                     
-                    result.push(currOrder);
+                    let orders = {
+                        modelNumber: [],
+                        internetNumber: [],
+                        itemDescription: [],
+                        qtyShipped: []
+                    };
+                    for(let item of content.items){
+                        for(let col in ORDERS){
+                            if(
+                                item.str != "" && 
+                                item.transform[4] >= ORDERS[col].x && 
+                                item.transform[5] == ORDERS[col].y
+                            ){
+                                orders[col].push(item.str);
+                            }
+                        }
+                    }
+                    
+                    for(let i = 0; i < orders.modelNumber.length; i++){
+                        let currOrder = {...currPage};
+                        for(let col in orders){
+                            currOrder[col] = orders[col][i];
+                        }
+                        result.push(currOrder);
+                    }
                 }
                 // Display the JSON as a string in the output
                 output.textContent = JSON.stringify(result, null, 2);
