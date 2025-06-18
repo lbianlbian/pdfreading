@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>PDF Text Extractor</title>
+  <title>Home Depot PDF to csv</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 40px; background: #f7f7f7; }
     .container { background: #fff; padding: 30px; border-radius: 8px; max-width: 600px; margin: auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
@@ -13,7 +13,7 @@
 </head>
 <body>
   <div class="container">
-    <h2>Upload a PDF and See Its Text</h2>
+    <h2>Convert Home Depot PDF to CSV</h2>
     <label for="pdf-upload">Choose PDF</label>
     <input type="file" id="pdf-upload" accept="application/pdf">
     <div id="pdf-text">PDF text will appear here.</div>
@@ -26,36 +26,162 @@
   </script>
   
   <script>
+    function downloadStringAsFile(str, filename, mimeType = "text/csv") {
+        const blob = new Blob([str], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click(); // This triggers the download automatically
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
     const input = document.getElementById('pdf-upload');
     const output = document.getElementById('pdf-text');
+    const POSITION_OF = {  // col name --> {x, y}
+        orderedBy: {
+            x: 154.44,
+            y: 28
+        },
+        modelNumber: {
+            x: 312.38,
+            y: 27
+        },
+        internetNumber: {
+            "x": 312.38,
+            "y": 106
+        },
+        itemDescription: {
+            "x": 505.4,
+            "y": 308
+        },
+        qtyShipped: {
+            "x": 312.38,
+            "y": 398.22
+        },
+        poNumber: {
+            "x": 467.5,
+            "y": 23
+        },
+        customerOrder: {
+            "x": 482.5,
+            "y": 23
+        },
+        customerName: {
+            "x": 497.5,
+            "y": 23
+        },
+        orderDate: {
+            "x": 108.44,
+            "y": 290
+        },
+        shipVia: {
+            "x": 122.44,
+            "y": 306
+        },
+        addressType: {
+            "x": 165.44,
+            "y": 331
+        }
+    };  
+    const SHIP_TO = {
+        x: 218.38,
+        y: 28
+    };  // lines go name, possibly addl name, address, city, tel
 
     input.addEventListener('change', async function() {
-      const file = this.files[0];
-      if (!file) return;
-      if (file.type !== 'application/pdf') {
-        output.textContent = 'Please upload a PDF file.';
-        return;
-      }
-      output.textContent = 'Extracting text...';
-
-      const reader = new FileReader();
-      reader.onload = async function(e) {
-        const typedarray = new Uint8Array(e.target.result);
-        try {
-          const pdf = await pdfjsLib.getDocument({data: typedarray}).promise;
-          let text = '';
-          for (let i = 1; i <= pdf.numPages; i++) {
-            const page = await pdf.getPage(i);
-            const content = await page.getTextContent();
-            text += content.items.map(item => item.str).join(' ') + '\n\n';
-          }
-          output.textContent = text.trim() || 'No text found in PDF.';
-        } catch (err) {
-          output.textContent = 'Error reading PDF: ' + err.message;
+        const file = this.files[0];
+        if (!file) return;
+        if (file.type !== 'application/pdf') {
+            output.textContent = 'Please upload a PDF file.';
+            return;
         }
-      };
-      reader.readAsArrayBuffer(file);
+        output.textContent = 'Converting...';
+
+        const reader = new FileReader();
+        reader.onload = async function(e) {
+            const typedarray = new Uint8Array(e.target.result);
+            try {
+                const pdf = await pdfjsLib.getDocument({data: typedarray}).promise;
+                const result = [];
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const content = await page.getTextContent();
+                    let currOrder = {};
+                    for(let col in POSITION_OF){
+                        for(let item of content.items){
+                            // 4 is x position, 5 is y position
+                            if(
+                                item.str != "" && 
+                                item.transform[4] == POSITION_OF[col].x && 
+                                item.transform[5] == POSITION_OF[col].y
+                            ){
+                                currOrder[col] = item.str;
+                                break;
+                            }
+                        }
+                    }
+
+                    let readingShipTo = false;
+                    let vals = [];  // will go street address, city, tel
+                    for(let item of content.items){
+                        if(
+                            item.str != "" && 
+                            item.transform[4] == SHIP_TO.x && 
+                            item.transform[5] == SHIP_TO.y
+                        ){
+                            readingShipTo = true;
+                        }
+                        if(readingShipTo){
+                            if(item.str == ""){
+                                // end of ship to info
+                                break;
+                            }
+                            vals.push(item.str)
+                        }
+                    }
+                    if(vals.length == 5){
+                        // multiple line customer name
+                        currOrder.shipToName = `${vals[0]} ${vals[1]}`;
+                        currOrder.shipToAddress = vals[2];
+                        currOrder.shipToCity = vals[3];
+                        currOrder.shipToTel = vals[4];
+                    }
+                    else{
+                        currOrder.shipToName = vals[0];
+                        currOrder.shipToAddress = vals[1];
+                        currOrder.shipToCity = vals[2];
+                        currOrder.shipToTel = vals[3];
+                    }
+                    
+                    result.push(currOrder);
+                }
+                // Display the JSON as a string in the output
+                output.textContent = JSON.stringify(result, null, 2);
+
+                // convert to str
+                let csvstr = "";
+                for(let col in result[0]){
+                    csvstr += `${col},`;
+                }
+                csvstr += "\n";
+                for(let obj of result){
+                    for(let col in obj){
+                        csvstr += `"${obj[col]}",`;
+                    }
+                    csvstr += "\n";
+                }
+                downloadStringAsFile(csvstr, "homedepot.csv");
+            } catch (err) {
+                output.textContent = 'Error reading PDF: ' + err.message;
+            }
+        };
+        reader.readAsArrayBuffer(file);
     });
+
   </script>
 </body>
 </html>
