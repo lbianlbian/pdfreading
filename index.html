@@ -39,6 +39,33 @@
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
     }
+    const EMAIL = "patrick.homedepot.wang@gmail.com"
+    function jojospringCsv(pages){
+        let output = "";
+        for(let page of pages){
+            let rows = [
+                `${EMAIL} (${page.poNumber.replace("PO # ", "")})`,
+                `"${page.shipToName}"`,
+                `"${page.shipToAddress}"`,
+                `"${page.shipToCity}"`,
+                `"${page.shipToCO}"`,
+                "",
+                page.shipToTel
+            ];
+            // repeat each order modelNumber by its qtyShipped times
+            for(let i = 0; i < page.orders.modelNumber.length; i++){
+                let repeatTimes = page.orders.qtyShipped[i];
+                for(let j = 0; j < repeatTimes; j++){
+                    rows.push(page.orders.modelNumber[i]);
+                }
+            }
+            rows.push("");
+            rows.push("");
+            output += rows.join("\n");
+            output += "\n";
+        }
+        return output;
+    }
     const input = document.getElementById('pdf-upload');
     const output = document.getElementById('pdf-text');
     const POSITION_OF = {  // col name --> {x, y}
@@ -147,16 +174,18 @@
                     }
                     if(vals.length == 5){
                         // multiple line customer name
-                        currPage.shipToName = `${vals[0]} ${vals[1]}`;
+                        currPage.shipToName = vals[0];
                         currPage.shipToAddress = vals[2];
                         currPage.shipToCity = vals[3];
                         currPage.shipToTel = vals[4];
+                        currPage.shipToCO = vals[1];
                     }
                     else{
                         currPage.shipToName = vals[0];
                         currPage.shipToAddress = vals[1];
                         currPage.shipToCity = vals[2];
                         currPage.shipToTel = vals[3];
+                        currPage.shipToCO = "";
                     }
                     
                     let orders = {
@@ -176,30 +205,14 @@
                             }
                         }
                     }
-                    
-                    for(let i = 0; i < orders.modelNumber.length; i++){
-                        let currOrder = {...currPage};
-                        for(let col in orders){
-                            currOrder[col] = orders[col][i];
-                        }
-                        result.push(currOrder);
-                    }
+                    currPage.orders = orders;
+                    result.push(currPage);
                 }
                 // Display the JSON as a string in the output
                 output.textContent = JSON.stringify(result, null, 2);
 
                 // convert to str
-                let csvstr = "";
-                for(let col in result[0]){
-                    csvstr += `${col},`;
-                }
-                csvstr += "\n";
-                for(let obj of result){
-                    for(let col in obj){
-                        csvstr += `"${obj[col]}",`;
-                    }
-                    csvstr += "\n";
-                }
+                let csvstr = jojospringCsv(result);
                 downloadStringAsFile(csvstr, "homedepot.csv");
             } catch (err) {
                 output.textContent = 'Error reading PDF: ' + err.message;
